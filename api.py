@@ -1,0 +1,141 @@
+"""
+api.py — API 查询、数据解析、全局状态
+"""
+
+import json
+import time
+import threading
+from datetime import datetime
+
+import requests
+
+from config import (
+    API_URL, APP_DIR, DEBUG_FILE, CST,
+    load_config, load_cache, save_cache,
+)
+
+# ── 全局状态 ────────────────────────────────────────────────
+_current_data = {
+    "five_hour": {"percentage": 0, "next_reset": "", "reset_datetime": ""},
+    "weekly":   {"percentage": 0, "next_reset": "", "reset_datetime": ""},
+    "monthly":   {"percentage": 0, "next_reset": "", "reset_datetime": ""},
+    "error":     "等待查询",
+}
+
+# ── 调试 ─────────────────────────────────────────────────
+def _save_debug_text(text, tag="error"):
+    try:
+        path = os.path.join(APP_DIR, f"debug_{tag}.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+    except Exception:
+        pass
+
+# ── API 查询 ─────────────────────────────────────────────
+def fetch_quota(api_key):
+    headers = {
+        "Authorization": api_key,
+        "Accept-Language": "en-US,en",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = requests.get(API_URL, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            _save_debug_text(f"HTTP {resp.status_code}: {resp.text[:500]}", "http_error")
+            return None
+        data = resp.json()
+        try:
+            with open(DEBUG_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+        return data.get("data", {}).get("limits") or data.get("limits")
+    except Exception as e:
+        _save_debug_text(f"fetch_quota exception: {type(e).__name__}: {e}", "fetch_error")
+        return None
+
+# ── 时间格式化 ──────────────────────────────────────────
+def format_reset_time(reset_ts):
+    if not reset_ts:
+        return ""
+    diff_s = int((reset_ts - time.time() * 1000) / 1000)
+    if diff_s <= 0:
+        return "已重置"
+    if diff_s < 3600:
+        return f"{diff_s // 60} 分钟后重置"
+    if diff_s < 86400:
+        h, m = diff_s // 3600, (diff_s % 3600) // 60
+        return f"{h} 小时 {m} 分钟后重置"
+    d, h = diff_s // 86400, (diff_s % 86400) // 3600
+    return f"{d} 天 {h} 小时后重置"
+
+def format_reset_datetime(reset_ts):
+    if not reset_ts:
+        return ""
+    dt = datetime.fromtimestamp(reset_ts / 1000, tz=CST)
+    now = datetime.now(CST)
+    if dt.date() == now.date():
+        return dt.strftime("%H:%M")
+    return dt.strftime("%m-%d %H:%M")
+
+# ── 数据解析 ────────────────────────────────────────────
+def parse_limits(limits):
+    empty = {"percentage": 0, "next_reset": "", "reset_datetime": ""}
+    result = {
+        "five_hour": dict(empty),
+        "weekly":   dict(empty),
+        "monthly":   dict(empty),
+        "error":     "",
+    }
+    if not limits or not isinstance(limits, list):
+        result["error"] = "无数据"
+        return result
+
+    mapping = {0: "five_hour", 1: "weekly", 2: "monthly"}
+    for idx, key in mapping.items():
+        if idx < len(limits):
+            pct = round(limits[idx].get("percentage", 0))
+            ts  = limits[idx].get("nextResetTime")
+            result[key] = {
+                "percentage":     pct,
+                "next_reset":      format_reset_time(ts),
+                "reset_datetime":  format_reset_datetime(ts),
+            }
+    return result
+
+def pct_color(pct):
+    if pct >= 80:
+        return "#FF3B30"
+    elif pct >= 50:
+        return "#FF9500"
+    elif pct >= 0:
+        return "#34C759"
+    return "#34C759"
+
+def hex_to_rgb(color):
+    color = color.lstrip("#")
+    return tuple(int(color[i:i+2], 16) for i in (0, 2, 4))
+
+# ── 数据刷新 ────────────────────────────────────────────
+def _do_refresh_inner():
+    global _current_data
+    api_key = load_config().get("api_key", "")
+    if not api_key:
+        _current_data["error"] = "未设置 API Key"
+        return
+
+    limits = fetch_quota(api_key)
+    if limits:
+        save_cache(limits)
+        _current_data = parse_limits(limits)
+        _current_data["error"] = ""
+    else:
+        cached = load_cache()
+        if cached:
+            _current_data = parse_limits(cached)
+            _current_data["error"] = "显示缓存数据"
+        else:
+            _current_data["error"] = "查询失败，无缓存"
+
+def do_refresh(icon=None, item=None):
+    threading.Thread(target=_do_refresh_inner, daemon=True).start()
