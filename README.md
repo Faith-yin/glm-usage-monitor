@@ -1,5 +1,7 @@
 # GLM Usage Monitor
 
+[English](README_EN.md) | 中文
+
 轻量级 Windows 系统托盘工具，实时监控 [智谱 AI](https://open.bigmodel.cn) GLM Coding Plan 的用量配额，悬停即查、一目了然。
 
 ![主窗口](images/主窗口.png) 
