@@ -131,7 +131,14 @@ class TooltipWindow:
             tx = 10
         elif tx + win_w > sw - 10:
             tx = sw - win_w - 10
-        ty = sh - win_h - 8
+
+        # Tooltip 始终显示在鼠标/图标上方，避免覆盖图标导致无法拖拽
+        # （尤其当图标在任务栏折叠区域时，Tooltip 不能挡住图标）
+        ty = anchor_y - win_h - 15
+        if ty < 10:
+            # 鼠标太靠近屏幕顶部，兜底显示在工作区底部
+            ty = sh - win_h - 8
+
         return tx, ty
 
     def _ensure_window(self, anchor_x, anchor_y):
