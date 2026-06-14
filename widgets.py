@@ -402,20 +402,28 @@ def _open_key_dialog():
     def _build():
         win = tk.Toplevel(backend.root)
         win.title("设置 API Key")
-        win.geometry("440x175")
         win.resizable(False, False)
 
+        # DPI 自适应尺寸
         win.update_idletasks()
+        scale = win.winfo_fpixels('1i') / 96.0
+        W, H = int(440 * scale), int(200 * scale)
+        win.geometry(f"{W}x{H}")
+
         sw, sh = _get_work_area()
-        win.geometry(f"+{max(0, (sw - 440) // 2)}+{max(0, (sh - 175) // 2)}")
+        win.geometry(f"+{max(0, (sw - W) // 2)}+{max(0, (sh - H) // 2)}")
+
+        pady_title = int(16 * scale)
+        pady_entry = int(10 * scale)
+        pady_btn = int(6 * scale)
 
         tk.Label(win, text="请输入智谱 AI 的 API Key",
-                 font=("Segoe UI", 11), fg="#333").pack(pady=(16, 0))
+                 font=("Segoe UI", 11), fg="#333").pack(pady=(pady_title, 0))
         tk.Label(win, text="获取地址：open.bigmodel.cn/usercenter/apikeys",
                  font=("Segoe UI", 9), fg="#888").pack(pady=(3, 0))
 
         entry = tk.Entry(win, width=46, font=("Segoe UI", 10), show="*")
-        entry.pack(pady=10)
+        entry.pack(pady=pady_entry)
         entry.focus_set()
 
         result = {"key": None}
@@ -430,7 +438,7 @@ def _open_key_dialog():
             win.destroy()
 
         bf = tk.Frame(win)
-        bf.pack(pady=4)
+        bf.pack(pady=pady_btn)
         tk.Button(bf, text="确定", command=on_ok, width=8,
                   font=("Segoe UI", 10), bg="#4CAF50", fg="white",
                   relief="flat").pack(side="left", padx=10)
