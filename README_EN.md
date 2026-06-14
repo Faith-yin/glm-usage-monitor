@@ -27,7 +27,7 @@ Download the latest `GLM用量监控.exe` from [Releases](../../releases) and ru
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-username/glm-usage-monitor.git
+git clone https://github.com/Faith-yin/glm-usage-monitor.git
 cd glm-usage-monitor
 
 # Install dependencies

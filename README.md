@@ -28,7 +28,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/你的用户名/glm-usage-monitor.git
+git clone https://github.com/Faith-yin/glm-usage-monitor.git
 cd glm-usage-monitor
 
 # 安装依赖
