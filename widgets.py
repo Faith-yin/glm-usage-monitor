@@ -289,9 +289,6 @@ class TooltipWindow:
         get_tk_backend().schedule(0, _build)
 
 
-# 全局单例
-_tooltip_win = TooltipWindow()
-
 # ── 窗口一：主常驻界面 (main_win) ────────────────────────
 def _open_detail_window(data):
     backend = get_tk_backend()

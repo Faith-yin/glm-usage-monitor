@@ -19,7 +19,7 @@ from config import (
 )
 
 from api import (
-    _current_data, fetch_quota, parse_limits, pct_color, hex_to_rgb,
+    parse_limits, pct_color, hex_to_rgb,
     _do_refresh_inner, do_refresh,
 )
 
@@ -79,11 +79,13 @@ def _update_icon():
     global _tray_icon
     if not _tray_icon:
         return
+    import api as _api
+    data = _api._current_data
     has_data = any(
-        _current_data.get(k, {}).get("percentage", 0) > 0
+        data.get(k, {}).get("percentage", 0) > 0
         for k in ["five_hour", "weekly", "monthly"]
     )
-    img = make_tray_icon(_current_data) if has_data else make_error_icon()
+    img = make_tray_icon(data) if has_data else make_error_icon()
     _tray_icon.icon = img
     _tray_icon.title = ""
 
@@ -176,35 +178,11 @@ try:
             _tooltip_win.show_loading(self._anchor_x, self._anchor_y)
 
             def _fetch():
-                global _current_data
-                api_key = load_config().get("api_key", "")
-                if api_key:
-                    limits = fetch_quota(api_key)
-                    if limits:
-                        save_config(load_config())  # no-op, but was in original
-                        _current_data_new = parse_limits(limits)
-                        # Need to update the global
-                        import api as _api
-                        _api._current_data = _current_data_new
-                        if _tray_icon:
-                            has_data = any(
-                                _current_data_new.get(k, {}).get("percentage", 0) > 0
-                                for k in ["five_hour", "weekly", "monthly"]
-                            )
-                            _tray_icon.icon = make_tray_icon(_current_data_new) if has_data else make_error_icon()
-                            _tray_icon.title = ""
-                    else:
-                        cached = load_cache()
-                        if cached:
-                            import api as _api
-                            _api._current_data = parse_limits(cached)
-                            _api._current_data["error"] = "显示缓存数据"
-                        else:
-                            import api as _api
-                            _api._current_data["error"] = "查询失败，无缓存"
-                else:
-                    import api as _api
-                    _api._current_data["error"] = "未设置 API Key"
+                # 复用 _do_refresh_inner（线程安全），不再手动 fetch/parse
+                import api as _api
+                _api._do_refresh_inner()
+
+                # 等待 tooltip 窗口就绪
                 for _ in range(10):
                     if _tooltip_win.is_showing():
                         break
@@ -216,6 +194,9 @@ try:
                         _tooltip_win.close()
                     else:
                         _tooltip_win.show_data(_api._current_data, self._anchor_x, self._anchor_y)
+
+                # 更新托盘图标
+                _update_icon()
 
             if not self._fetch_thread or not self._fetch_thread.is_alive():
                 self._fetch_thread = threading.Thread(target=_fetch, daemon=True)
@@ -266,7 +247,8 @@ def start():
     cached = load_cache()
     if cached:
         import api as _api
-        _api._current_data = parse_limits(cached)
+        _api._current_data.clear()
+        _api._current_data.update(parse_limits(cached))
 
     menu = pystray.Menu(
         pystray.MenuItem("查看详情", show_detail, default=True),

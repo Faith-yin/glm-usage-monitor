@@ -3,6 +3,7 @@ api.py — API 查询、数据解析、全局状态
 """
 
 import json
+import os
 import time
 import threading
 from datetime import datetime
@@ -124,25 +125,37 @@ def hex_to_rgb(color):
     return tuple(int(color[i:i+2], 16) for i in (0, 2, 4))
 
 # ── 数据刷新 ────────────────────────────────────────────
+_refresh_lock = threading.Lock()
+
 def _do_refresh_inner():
+    """执行一次数据刷新（线程安全），返回 True 表示刷新成功"""
     global _current_data
     api_key = load_config().get("api_key", "")
     if not api_key:
-        _current_data["error"] = "未设置 API Key"
-        return
+        with _refresh_lock:
+            _current_data["error"] = "未设置 API Key"
+        return False
 
     limits = fetch_quota(api_key)
-    if limits:
-        save_cache(limits)
-        _current_data = parse_limits(limits)
-        _current_data["error"] = ""
-    else:
-        cached = load_cache()
-        if cached:
-            _current_data = parse_limits(cached)
-            _current_data["error"] = "显示缓存数据"
+    with _refresh_lock:
+        if limits:
+            save_cache(limits)
+            _current_data.update(parse_limits(limits))
+            _current_data["error"] = ""
+            return True
         else:
-            _current_data["error"] = "查询失败，无缓存"
+            cached = load_cache()
+            if cached:
+                _current_data.update(parse_limits(cached))
+                _current_data["error"] = "显示缓存数据"
+            else:
+                _current_data["error"] = "查询失败，无缓存"
+            return False
+
+def get_current_data():
+    """返回当前数据的浅拷贝（线程安全）"""
+    with _refresh_lock:
+        return dict(_current_data)
 
 def do_refresh(icon=None, item=None):
     threading.Thread(target=_do_refresh_inner, daemon=True).start()
