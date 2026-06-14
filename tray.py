@@ -122,6 +122,11 @@ try:
                         return
                     if self._state == "HOVERING":
                         self._reset_leave_timer()
+                        # 跟随鼠标位置更新锚点，避免在图标按钮区域内移动时误判离开
+                        pt = wintypes.POINT()
+                        ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+                        self._anchor_x = pt.x
+                        self._anchor_y = pt.y
                     elif self._state == "IDLE":
                         self._cancel_leave_timer()
                         if self._enter_timer:
