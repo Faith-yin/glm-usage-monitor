@@ -52,7 +52,7 @@ CACHE_FILE = os.path.join(APP_DIR, "quota_cache.json")
 DEBUG_FILE = os.path.join(APP_DIR, "debug_last_response.json")
 
 API_URL = "https://open.bigmodel.cn/api/monitor/usage/quota/limit"
-DEFAULT_REFRESH_INTERVAL = 300
+DEFAULT_REFRESH_INTERVAL = 3600
 CACHE_TTL = 300
 CST = timezone(timedelta(hours=8))
 ICON_SIZE = 64
@@ -174,10 +174,10 @@ _TT_BAR_BG   = "#E5E5EA"
 _TT_HINT     = "#aeaeb2"
 _TT_SEP      = "#E0E0E0"
 _TT_ROW_SEP  = "#E0E0E0"
-_TT_SIDE     = 20
+_TT_SIDE     = 28
 _TT_BAR_H    = 9
 _TT_BASE_W   = 280
-_TT_BASE_H   = 250
+_TT_BASE_H   = 260
 
 _FONT_TITLE = ("Microsoft YaHei UI", 15, "bold")
 _FONT_LABEL = ("Microsoft YaHei UI", 12, "normal")

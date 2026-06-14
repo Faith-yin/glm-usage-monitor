@@ -124,6 +124,22 @@ class TooltipWindow:
         except Exception:
             pass
 
+    @staticmethod
+    def _set_rounded(win):
+        """为窗口设置圆角（DWM API，Windows 11 原生支持）"""
+        try:
+            DWMWA_WINDOW_CORNER_PREFERENCE = 33
+            DWMWCP_ROUND = 2
+            hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                ctypes.byref(ctypes.c_int(DWMWCP_ROUND)),
+                ctypes.sizeof(ctypes.c_int),
+            )
+        except Exception:
+            pass
+
     def _calc_pos(self, anchor_x, anchor_y, win_w, win_h):
         sw, sh = _get_work_area()
         tx = anchor_x - (win_w // 2)
@@ -134,7 +150,7 @@ class TooltipWindow:
 
         # Tooltip 始终显示在鼠标/图标上方，避免覆盖图标导致无法拖拽
         # （尤其当图标在任务栏折叠区域时，Tooltip 不能挡住图标）
-        ty = anchor_y - win_h - 15
+        ty = anchor_y - win_h - 50
         if ty < 10:
             # 鼠标太靠近屏幕顶部，兜底显示在工作区底部
             ty = sh - win_h - 8
@@ -163,6 +179,8 @@ class TooltipWindow:
             win.resizable(False, False)
             win.update_idletasks()
 
+            TooltipWindow._set_rounded(win)
+
             border_frame = tk.Frame(win, bg=_TT_BORDER, width=W, height=H)
             border_frame.pack_propagate(False)
             border_frame.pack(fill="both", expand=True)
@@ -190,7 +208,7 @@ class TooltipWindow:
             for w in outer.winfo_children(): w.destroy()
             tk.Label(outer, text="GLM Coding Plan", bg=_TT_BG, fg=_TT_FG,
                      font=_FONT_TITLE, anchor="w").pack(
-                     fill="x", padx=_TT_SIDE, pady=(18, 8))
+                     fill="x", padx=_TT_SIDE, pady=(24, 8))
             ls = tk.Frame(outer, bg=_TT_SEP, height=1)
             ls.pack(fill="x", padx=_TT_SIDE, pady=(0, 8))
             ls.pack_propagate(False)
@@ -208,7 +226,7 @@ class TooltipWindow:
 
             # 标题行：左侧标题 + 右侧更新时间
             title_row = tk.Frame(outer, bg=_TT_BG)
-            title_row.pack(fill="x", padx=_TT_SIDE, pady=(18, 8))
+            title_row.pack(fill="x", padx=_TT_SIDE, pady=(24, 8))
             tk.Label(title_row, text="GLM Coding Plan", bg=_TT_BG, fg=_TT_FG,
                      font=_FONT_TITLE, anchor="w").pack(side="left")
             tk.Label(title_row, text=datetime.now(CST).strftime("%H:%M 更新"),
@@ -265,7 +283,7 @@ class TooltipWindow:
             if err:
                 tk.Label(outer, text=err, bg=_TT_BG, fg="#e24b4a",
                          font=_FONT_HINT, anchor="e").pack(
-                         fill="x", padx=_TT_SIDE, pady=(0, 10))
+                         fill="x", padx=_TT_SIDE, pady=(0, 14))
 
             win.update_idletasks()
         get_tk_backend().schedule(0, _build)

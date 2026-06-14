@@ -111,10 +111,13 @@ try:
             self._fetch_thread = None
             self._anchor_x = 0
             self._anchor_y = 0
+            self._menu_visible = False
 
         def _on_notify(self, wparam, lparam):
             if lparam == WM_MOUSEMOVE:
                 with self._hover_lock:
+                    if self._menu_visible:
+                        return
                     if self._state == "HOVERING":
                         self._reset_leave_timer()
                     elif self._state == "IDLE":
@@ -132,7 +135,12 @@ try:
                     if self._state != "IDLE":
                         self._state = "IDLE"
                         _tooltip_win.close()
+                # TrackPopupMenu 是同步阻塞的，前后设置标记防止 timer/fetch 线程在此期间弹出 tooltip
+                if lparam in (WM_RBUTTONUP,):
+                    self._menu_visible = True
                 super()._on_notify(wparam, lparam)
+                if lparam in (WM_RBUTTONUP,):
+                    self._menu_visible = False
 
         def _cancel_enter_timer(self):
             if self._enter_timer:
@@ -154,6 +162,9 @@ try:
             with self._hover_lock:
                 self._enter_timer = None
                 if self._state != "ENTERING":
+                    return
+                if self._menu_visible:
+                    self._state = "IDLE"
                     return
                 self._state = "HOVERING"
                 pt = wintypes.POINT()
@@ -201,7 +212,10 @@ try:
 
                 import api as _api
                 if _tooltip_win.is_showing():
-                    _tooltip_win.show_data(_api._current_data, self._anchor_x, self._anchor_y)
+                    if self._menu_visible:
+                        _tooltip_win.close()
+                    else:
+                        _tooltip_win.show_data(_api._current_data, self._anchor_x, self._anchor_y)
 
             if not self._fetch_thread or not self._fetch_thread.is_alive():
                 self._fetch_thread = threading.Thread(target=_fetch, daemon=True)
@@ -268,20 +282,20 @@ def start():
                 "1 分钟", make_set_interval_callback(60),
                 checked=lambda item: get_refresh_interval() == 60, radio=True),
             pystray.MenuItem(
-                "3 分钟", make_set_interval_callback(180),
-                checked=lambda item: get_refresh_interval() == 180, radio=True),
-            pystray.MenuItem(
                 "5 分钟", make_set_interval_callback(300),
                 checked=lambda item: get_refresh_interval() == 300, radio=True),
             pystray.MenuItem(
                 "10 分钟", make_set_interval_callback(600),
                 checked=lambda item: get_refresh_interval() == 600, radio=True),
             pystray.MenuItem(
-                "15 分钟", make_set_interval_callback(900),
-                checked=lambda item: get_refresh_interval() == 900, radio=True),
-            pystray.MenuItem(
                 "30 分钟", make_set_interval_callback(1800),
                 checked=lambda item: get_refresh_interval() == 1800, radio=True),
+            pystray.MenuItem(
+                "1 小时", make_set_interval_callback(3600),
+                checked=lambda item: get_refresh_interval() == 3600, radio=True),
+            pystray.MenuItem(
+                "2 小时", make_set_interval_callback(7200),
+                checked=lambda item: get_refresh_interval() == 7200, radio=True),
         )),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("设置 API Key", set_api_key),

@@ -62,21 +62,28 @@ def format_reset_time(reset_ts):
     if diff_s <= 0:
         return "已重置"
     if diff_s < 3600:
-        return f"{diff_s // 60} 分钟后重置"
+        return f"{diff_s // 60}min 后重置"
     if diff_s < 86400:
         h, m = diff_s // 3600, (diff_s % 3600) // 60
-        return f"{h} 小时 {m} 分钟后重置"
+        if m:
+            return f"{h}h {m}min 后重置"
+        return f"{h}h 后重置"
     d, h = diff_s // 86400, (diff_s % 86400) // 3600
-    return f"{d} 天 {h} 小时后重置"
+    if h:
+        return f"{d}d {h}h 后重置"
+    return f"{d}d 后重置"
+
+_WEEKDAY_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 def format_reset_datetime(reset_ts):
     if not reset_ts:
         return ""
     dt = datetime.fromtimestamp(reset_ts / 1000, tz=CST)
     now = datetime.now(CST)
+    wd = _WEEKDAY_CN[dt.weekday()]
     if dt.date() == now.date():
         return dt.strftime("%H:%M")
-    return dt.strftime("%m-%d %H:%M")
+    return dt.strftime(f"%m-%d {wd} %H:%M")
 
 # ── 数据解析 ────────────────────────────────────────────
 def parse_limits(limits):

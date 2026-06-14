@@ -11,7 +11,7 @@ A lightweight Windows system tray tool that monitors [Zhipu AI](https://open.big
 - **Hover to Check** — Hover over the tray icon to reveal a minimal card showing three quotas (5-hour / weekly / MCP monthly)
 - **Color Indicator** — Tray icon displays 5-hour usage percentage with green / orange / red colors
 - **Reset Countdown** — Each quota shows reset time so you can plan ahead
-- **Auto Refresh** — Configurable interval from 1~30 minutes, silent background updates
+- **Auto Refresh** — Configurable interval from 1 min to 2 hours, silent background updates
 - **Cache Fallback** — Automatically shows last cached data on network failure
 - **Startup with Windows** — One-click toggle via Windows registry
 - **Detail Window** — Double-click tray icon for detail panel with manual refresh
@@ -62,7 +62,7 @@ python main.py
 ```json
 {
   "api_key": "your-zhipu-api-key",
-  "refresh_interval": 300,
+  "refresh_interval": 3600,
   "autostart": true
 }
 ```
@@ -70,7 +70,7 @@ python main.py
 | Field | Description | Default |
 |-------|-------------|---------|
 | `api_key` | Zhipu AI API Key | — |
-| `refresh_interval` | Auto-refresh interval (seconds) | 300 (5 min) |
+| `refresh_interval` | Auto-refresh interval (seconds) | 3600 (1 hour) |
 | `autostart` | Enable startup with Windows | false |
 
 ## Project Structure
