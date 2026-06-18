@@ -87,28 +87,45 @@ def format_reset_datetime(reset_ts):
     return dt.strftime(f"%m-%d {wd} %H:%M")
 
 # ── 数据解析 ────────────────────────────────────────────
+
+# API 返回的 (type, unit) 组合 → 内部 key 的映射
+# 基于 https://open.bigmodel.cn/api/monitor/usage/quota/limit 实际返回结构
+_QUOTA_TYPE_MAP = {
+    ("TOKENS_LIMIT", 3): "five_hour",   # 每5小时额度
+    ("TOKENS_LIMIT", 6): "weekly",      # 每周额度
+    ("TIME_LIMIT",   5): "monthly",     # MCP 每月额度
+}
+
+
 def parse_limits(limits):
+    """
+    解析 API 返回的 limits 数组，按 (type, unit) 组合精确匹配到
+    five_hour / weekly / monthly，不依赖数组索引顺序。
+    """
     empty = {"percentage": 0, "next_reset": "", "reset_datetime": ""}
     result = {
         "five_hour": dict(empty),
         "weekly":   dict(empty),
-        "monthly":   dict(empty),
+        "monthly":  dict(empty),
         "error":     "",
     }
     if not limits or not isinstance(limits, list):
         result["error"] = "无数据"
         return result
 
-    mapping = {0: "five_hour", 1: "weekly", 2: "monthly"}
-    for idx, key in mapping.items():
-        if idx < len(limits):
-            pct = round(limits[idx].get("percentage", 0))
-            ts  = limits[idx].get("nextResetTime")
+    for item in limits:
+        qtype = item.get("type")
+        unit = item.get("unit")
+        key = _QUOTA_TYPE_MAP.get((qtype, unit))
+        if key:
+            pct = round(item.get("percentage", 0))
+            ts = item.get("nextResetTime")
             result[key] = {
                 "percentage":     pct,
                 "next_reset":      format_reset_time(ts),
                 "reset_datetime":  format_reset_datetime(ts),
             }
+
     return result
 
 def pct_color(pct):
