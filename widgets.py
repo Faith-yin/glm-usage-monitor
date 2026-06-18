@@ -81,6 +81,8 @@ class TooltipWindow:
         self._lock      = threading.Lock()
         self._outer     = None
         self._actual_w  = _TT_BASE_W
+        self._anchor_x  = 0
+        self._anchor_y  = 0
 
     def _safe_destroy(self):
         with self._lock:
@@ -159,9 +161,14 @@ class TooltipWindow:
         return tx, ty
 
     def _ensure_window(self, anchor_x, anchor_y):
+        """创建或复用 tooltip 窗口（仅设置宽度，高度由内容动态决定）"""
         with self._lock:
             if self._win and self._win.winfo_exists():
+                # 窗口已存在时复用，不更新锚点（避免鼠标微移导致位置跳变）
                 return self._win, self._outer
+            # 仅在首次创建窗口时记录锚点并冻结
+            self._anchor_x = anchor_x
+            self._anchor_y = anchor_y
             bk = get_tk_backend()
             win = tk.Toplevel(bk.root)
             win.overrideredirect(True)
@@ -172,22 +179,20 @@ class TooltipWindow:
             win.update_idletasks()
             scale = win.winfo_fpixels('1i') / 96.0
             self._actual_w = int(_TT_BASE_W * scale)
-            actual_h = int(_TT_BASE_H * scale)
-            W, H = self._actual_w, actual_h
+            W = self._actual_w
 
-            tx, ty = self._calc_pos(anchor_x, anchor_y, W, H)
-            win.geometry(f"{W}x{H}+{tx}+{ty}")
+            # 先用最小高度创建窗口，后续由 _fit_to_content 调整
+            tx, ty = self._calc_pos(anchor_x, anchor_y, W, 100)
+            win.geometry(f"{W}x{100}+{tx}+{ty}")
             win.resizable(False, False)
             win.update_idletasks()
 
             TooltipWindow._set_rounded(win)
 
-            border_frame = tk.Frame(win, bg=_TT_BORDER, width=W, height=H)
-            border_frame.pack_propagate(False)
+            border_frame = tk.Frame(win, bg=_TT_BORDER, width=W)
             border_frame.pack(fill="both", expand=True)
 
-            outer = tk.Frame(border_frame, bg=_TT_BG, width=W - 2, height=H - 2)
-            outer.pack_propagate(False)
+            outer = tk.Frame(border_frame, bg=_TT_BG, width=W - 2)
             outer.pack(padx=1, pady=1)
 
             win.lift(); win.update_idletasks()
@@ -202,21 +207,69 @@ class TooltipWindow:
             self._win, self._outer = win, outer
             return win, outer
 
+    def _fit_to_content(self, win, outer):
+        """
+        内容填充完毕后调用：根据实际内容动态调整窗口尺寸并重新定位。
+        解决不同 DPI / 分辨率下固定高度不够用的问题。
+        """
+        if not win or not win.winfo_exists():
+            return
+        # 让 Tk 计算所有子组件的自然尺寸
+        win.update_idletasks()
+        # outer 的请求高度即为内容实际需要的高度（含 padding）
+        content_h = outer.winfo_reqheight()
+        # 加上 border_frame 的 padx=1 + pady=1 各两边
+        total_h = content_h + 2
+        W = self._actual_w
+        # 重新定位（锚点可能已变化）
+        tx, ty = self._calc_pos(self._anchor_x, self._anchor_y, W, total_h)
+        win.geometry(f"{W}x{total_h}+{tx}+{ty}")
+
     def show_loading(self, anchor_x, anchor_y):
         def _build():
             win, outer = self._ensure_window(anchor_x, anchor_y)
             if not win: return
             for w in outer.winfo_children(): w.destroy()
+
+            # 标题行
             tk.Label(outer, text="GLM Coding Plan", bg=_TT_BG, fg=_TT_FG,
                      font=_FONT_TITLE, anchor="w").pack(
                      fill="x", padx=_TT_SIDE, pady=(24, 8))
             ls = tk.Frame(outer, bg=_TT_SEP, height=1)
             ls.pack(fill="x", padx=_TT_SIDE, pady=(0, 8))
             ls.pack_propagate(False)
-            body = tk.Frame(outer, bg=_TT_BG)
-            body.pack(fill="both", expand=True)
-            tk.Label(body, text="正在查询用量\u2026", bg=_TT_BG, fg=_TT_SUB,
-                     font=_FONT_LOAD).pack(expand=True)
+
+            # 骨架屏：三行占位，与最终数据高度一致，避免加载完成后窗口跳动
+            _skeleton_labels = ["每5小时", "每周", "MCP每月"]
+            for idx, label in enumerate(_skeleton_labels):
+                row = tk.Frame(outer, bg=_TT_BG)
+                row.pack(fill="x", padx=_TT_SIDE,
+                         pady=(0 if idx == 0 else 8, 0))
+
+                top = tk.Frame(row, bg=_TT_BG)
+                top.pack(fill="x")
+                tk.Label(top, text=label, bg=_TT_BG, fg=_TT_LABEL_FG,
+                         font=_FONT_LABEL, anchor="w").pack(side="left")
+                # 占位百分比（浅色表示加载中）
+                tk.Label(top, text="\u2026", bg=_TT_BG, fg=_TT_HINT,
+                         font=_FONT_PCT).pack(side="right")
+
+                bar_w = self._actual_w - 2 - 2 * _TT_SIDE
+                bar = _pill_bar(row, 0, "#E5E5EA", bar_w)
+                bar.pack(fill="x", pady=(5, 3))
+
+                tk.Label(row, text="查询中\u2026", bg=_TT_BG, fg=_TT_SUB,
+                         font=_FONT_TIME, anchor="w").pack(fill="x", pady=(2, 0))
+
+                if idx < len(_skeleton_labels) - 1:
+                    sep = tk.Frame(outer, bg=_TT_ROW_SEP, height=1)
+                    sep.pack(fill="x", padx=_TT_SIDE, pady=(14, 0))
+                    sep.pack_propagate(False)
+
+            # 底部内边距（与 show_data 一致）
+            tk.Frame(outer, bg=_TT_BG, height=20).pack(fill="x")
+
+            self._fit_to_content(win, outer)
         get_tk_backend().schedule(0, _build)
 
     def show_data(self, data, anchor_x, anchor_y):
@@ -286,7 +339,10 @@ class TooltipWindow:
                          font=_FONT_HINT, anchor="e").pack(
                          fill="x", padx=_TT_SIDE, pady=(0, 14))
 
-            win.update_idletasks()
+            # 底部内边距
+            tk.Frame(outer, bg=_TT_BG, height=20).pack(fill="x")
+
+            self._fit_to_content(win, outer)
         get_tk_backend().schedule(0, _build)
 
 
@@ -298,7 +354,7 @@ def _open_detail_window(data):
         for w in main_content.winfo_children():
             w.destroy()
         inner = tk.Frame(main_content, bg="#FFFFFF")
-        inner.pack(fill="both", expand=True, padx=20, pady=16)
+        inner.pack(fill="both", expand=True, padx=20, pady=28)
 
         rows = [
             ("每5小时额度", data.get("five_hour", {})),
@@ -315,10 +371,10 @@ def _open_detail_window(data):
                 inner, text=f"{label}：{pct}%",
                 font=("Microsoft YaHei UI", 11, "bold"), fg=_TT_FG,
                 bg="#FFFFFF", anchor="w",
-            ).pack(fill="x", pady=(10, 0))
+            ).pack(fill="x", pady=(14, 0))
 
             bar_bg = tk.Frame(inner, bg=_TT_BAR_BG, height=8)
-            bar_bg.pack(fill="x", pady=(6, 2))
+            bar_bg.pack(fill="x", pady=(8, 4))
             if pct > 0:
                 fill = tk.Frame(bar_bg, bg=c, height=8)
                 fill.place(relx=0, rely=0, relwidth=min(pct / 100, 1.0), relheight=1.0)
@@ -328,7 +384,7 @@ def _open_detail_window(data):
                 inner, text=t,
                 font=("Microsoft YaHei UI", 9), fg=_TT_SUB,
                 bg="#FFFFFF", anchor="w",
-            ).pack(fill="x", pady=(2, 6))
+            ).pack(fill="x", pady=(2, 12))
 
         main_content.update_idletasks()
 
@@ -345,21 +401,23 @@ def _open_detail_window(data):
     def _build():
         main_win = tk.Toplevel(backend.root)
         main_win.title("GLM Coding Plan 用量详情")
-        main_win.geometry("600x600")
-        main_win.minsize(560, 540)
 
-        main_win.update_idletasks()
+        # 宽度固定，高度由内容动态决定（先创建再调整）
+        WIN_W = 600
+        main_win.geometry(f"{WIN_W}x{1}")
+        main_win.resizable(False, False)
+
         sw, sh = _get_work_area()
-        x = max(0, (sw - 600) // 2)
-        y = max(0, (sh - 600) // 2)
-        main_win.geometry(f"+{x}+{y}")
+        x = max(0, (sw - WIN_W) // 2)
+        y = max(0, (sh - 500) // 2)  # 初始预估高度用于居中
+        main_win.geometry(f"{WIN_W}x{1}+{x}+{y}")
 
         main_content = tk.Frame(main_win, bg="#FFFFFF")
         main_content.pack(fill="both", expand=True, padx=16, pady=12)
 
         _build_content(main_content, data)
 
-        btn_f = tk.Frame(main_win, bg="#FFFFFF", pady=10)
+        btn_f = tk.Frame(main_win, bg="#FFFFFF", pady=16)
         btn_f.pack(fill="x")
 
         refresh_btn = tk.Button(
@@ -378,6 +436,11 @@ def _open_detail_window(data):
                 def _update_ui():
                     _build_content(main_content, api._current_data)
                     refresh_btn.config(text="刷新数据", state="normal")
+                    # 刷新后重新适配窗口高度
+                    main_win.update_idletasks()
+                    content_h = main_win.winfo_reqheight()
+                    y = max(0, (sh - content_h) // 2)
+                    main_win.geometry(f"{WIN_W}x{content_h}+{x}+{y}")
                 backend.schedule(0, _update_ui)
 
             threading.Thread(target=_run, daemon=True).start()
@@ -388,6 +451,12 @@ def _open_detail_window(data):
             btn_f, text="关闭", command=main_win.destroy,
             font=("Microsoft YaHei UI", 10), padx=16, relief="flat",
         ).pack(side="right", padx=20)
+
+        # 内容全部构建完毕后，根据实际内容动态调整窗口高度并重新居中
+        main_win.update_idletasks()
+        content_h = main_win.winfo_reqheight()
+        y = max(0, (sh - content_h) // 2)
+        main_win.geometry(f"{WIN_W}x{content_h}+{x}+{y}")
 
         main_win.protocol("WM_DELETE_WINDOW", main_win.destroy)
 
